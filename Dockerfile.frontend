@@ -1,0 +1,21 @@
+FROM node:20-alpine
+
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+WORKDIR /app
+
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* tsconfig.base.json ./
+
+COPY packages/shared/package.json packages/shared/
+COPY packages/frontend/package.json packages/frontend/
+
+RUN pnpm install --frozen-lockfile
+
+COPY packages/shared/ packages/shared/
+COPY packages/frontend/ packages/frontend/
+
+RUN pnpm --filter @todo/shared build
+
+EXPOSE 5173
+
+CMD ["pnpm", "--filter", "@todo/frontend", "dev"]

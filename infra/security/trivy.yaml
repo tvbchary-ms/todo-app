@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────────────────────
+# Trivy Security Scanner Configuration
+# ─────────────────────────────────────────────────────────────
+
+# Severity levels to report
+severity:
+  - CRITICAL
+  - HIGH
+
+# Vulnerability scanning
+vulnerability:
+  type:
+    - os
+    - library
+
+# Secret scanning
+secret:
+  config: {}
+
+# Misconfiguration scanning
+misconfiguration:
+  # Scan Dockerfiles, Kubernetes manifests, etc.
+  include:
+    - docker
+    - kubernetes
+
+# License scanning
+license:
+  # Flag restrictive licenses
+  forbidden:
+    - GPL-3.0
+    - AGPL-3.0
+
+# Skip specific directories
+skip-dirs:
+  - node_modules
+  - .git
+  - coverage
+  - dist
+
+# Skip specific files
+skip-files:
+  - "*.test.ts"
+  - "*.spec.ts"

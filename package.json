@@ -1,0 +1,25 @@
+{
+  "name": "todo-devsecops",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Production-grade To-Do application with DevSecOps pipeline",
+  "scripts": {
+    "dev": "pnpm --filter @todo/backend dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:coverage": "pnpm -r test:coverage",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @todo/backend db:generate",
+    "db:migrate": "pnpm --filter @todo/backend db:migrate",
+    "db:studio": "pnpm --filter @todo/backend db:studio",
+    "docker:dev": "docker compose --project-directory . -f infra/docker/docker-compose.yml up --build",
+    "docker:prod": "docker compose --project-directory . -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.prod.yml up --build -d",
+    "docker:down": "docker compose --project-directory . -f infra/docker/docker-compose.yml down -v"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

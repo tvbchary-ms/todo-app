@@ -1,0 +1,45 @@
+# ─────────────────────────────────────────────────────────────
+# Docker Compose — Production overrides
+# Usage: docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.prod.yml up -d
+# ─────────────────────────────────────────────────────────────
+
+services:
+  backend:
+    restart: always
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      # In production, these come from AWS SSM via entrypoint script
+      # DATABASE_URL: fetched from SSM
+      # JWT_SECRET: fetched from SSM
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+  postgres:
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 256M

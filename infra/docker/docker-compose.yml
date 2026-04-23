@@ -1,0 +1,142 @@
+# ─────────────────────────────────────────────────────────────
+# Docker Compose — Development + Production base
+# ─────────────────────────────────────────────────────────────
+
+services:
+  # ── PostgreSQL 16 ────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: todo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: todo_db
+      POSTGRES_USER: todo_user
+      POSTGRES_PASSWORD: todo_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U todo_user -d todo_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - todo-net
+
+  # ── Frontend ─────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: todo-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    networks:
+      - todo-net
+
+  # ── Backend API ──────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: todo-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://todo_user:todo_password@postgres:5432/todo_db
+      JWT_SECRET: dev-jwt-secret-change-me-in-production-32chars
+      JWT_EXPIRES_IN: 7d
+      PORT: "3001"
+      NODE_ENV: development
+      LOG_LEVEL: debug
+      CORS_ORIGIN: http://localhost:5173
+      RATE_LIMIT_WINDOW_MS: "900000"
+      RATE_LIMIT_MAX_REQUESTS: "100"
+    ports:
+      - "3001:3001"
+    networks:
+      - todo-net
+
+  # ── Prometheus ───────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: todo-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - todo-net
+
+  # ── Grafana ──────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: todo-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - todo-net
+
+  # ── Loki ─────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.2.0
+    container_name: todo-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./infra/monitoring/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - todo-net
+
+  # ── Promtail (Log shipper) ──────────────────────────────────
+  promtail:
+    image: grafana/promtail:3.2.0
+    container_name: todo-promtail
+    restart: unless-stopped
+    depends_on:
+      - loki
+    command: -config.file=/etc/promtail/promtail.yml
+    volumes:
+      - ./infra/monitoring/loki/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - todo-net
+
+volumes:
+  pgdata:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+
+networks:
+  todo-net:
+    driver: bridge

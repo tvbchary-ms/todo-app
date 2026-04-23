@@ -1,0 +1,38 @@
+import "./env-setup.js";
+import { createApp } from "./app.js";
+import { getConfig } from "./config/index.js";
+import { closeDb } from "./db/index.js";
+import { logger } from "./lib/logger.js";
+const appConfig = getConfig();
+const app = createApp();
+const server = app.listen(appConfig.PORT, () => {
+    logger.info({
+        port: appConfig.PORT,
+        env: appConfig.NODE_ENV,
+    }, `🚀 Server running on port ${appConfig.PORT}`);
+});
+// ─── Graceful Shutdown ───────────────────────────────────────
+const shutdown = async (signal) => {
+    logger.info({ signal }, "Received shutdown signal, gracefully shutting down…");
+    server.close(async () => {
+        logger.info("HTTP server closed");
+        await closeDb();
+        logger.info("Database connections closed");
+        process.exit(0);
+    });
+    // Force shutdown after 30s
+    setTimeout(() => {
+        logger.error("Forced shutdown after timeout");
+        process.exit(1);
+    }, 30_000);
+};
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("unhandledRejection", (reason) => {
+    logger.error({ reason }, "Unhandled promise rejection");
+});
+process.on("uncaughtException", (err) => {
+    logger.fatal({ err }, "Uncaught exception — shutting down");
+    process.exit(1);
+});
+//# sourceMappingURL=index.js.map
