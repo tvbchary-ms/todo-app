@@ -1,86 +1,160 @@
-# Local Setup Guide: DevSecOps To-Do App
-
-This guide will walk you through the steps to run the complete DevSecOps To-Do application (Backend, Database, and Frontend) on your local machine.
-
-## Prerequisites
-
-Ensure you have the following installed on your machine:
-- **Node.js** (v20.0.0 or higher)
-- **pnpm** (v9.0.0 or higher)
-- **Docker** & **Docker Compose**
-
-## 1. Installation
-
-Install all monorepo dependencies from the project root:
-
-```bash
-pnpm install
-```
-
-## 2. Environment Configuration
-
-The backend requires environment variables to connect to the database and manage authentication. 
-
-Copy the provided example environment file to `.env`:
-```bash
-cp .env.example .env
-```
-
-If you keep the defaults in `.env`, the system will automatically configure itself to use a local PostgreSQL database with the credentials `todo_user`:`todo_password` on port `5432`.
-
-## 3. Database Setup
-
-You can easily spin up the required PostgreSQL database using the provided Docker Compose file:
-
-```bash
-# Start the database in the background
-docker compose -f infra/docker/docker-compose.yml up -d postgres
-```
-
-> **Note:** Once the database container is running, make sure your database schema is up to date:
-> ```bash
-> pnpm db:generate
-> pnpm db:migrate
-> ```
-
-## 4. Running the Application Locally (Development Mode)
-
-For the best developer experience with hot-reloading, run the backend and frontend separately.
-
-### Start the Backend
-In your terminal, from the project root, run:
-```bash
-pnpm dev
-```
-*The backend API server will start at `http://localhost:3001`.*
-
-### Start the Frontend
-In a **separate** terminal window, run:
-```bash
-pnpm --filter @todo/frontend dev
-```
-*The React web application will start at `http://localhost:5173`.*
+# Setup Guide: Todo App on Ubuntu (AWS)
 
 ---
 
-## Alternative: Run Everything via Docker
+## Prerequisites
 
-If you prefer to run the entire stack (Database, Backend API, and the Observability stack including Prometheus/Grafana) simultaneously via Docker:
+Install Docker and Docker Compose on the Ubuntu instance:
+
+```bash
+sudo apt update && sudo apt install -y docker.io docker-compose-plugin
+
+# Allow running docker without sudo (re-login after this)
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+Install Node.js 20 and pnpm (needed only for running migrations via drizzle-kit):
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+npm install -g pnpm@9.15.0
+```
+
+---
+
+## 1. Copy files to the server
+
+From your local machine:
+
+```bash
+scp -r /path/to/todo-app ubuntu@<your-aws-ip>:/home/ubuntu/todo-app
+```
+
+Or clone directly on the server:
+
+```bash
+git clone <your-repo-url> /home/ubuntu/todo-app
+cd /home/ubuntu/todo-app
+```
+
+---
+
+## 2. Install dependencies
+
+```bash
+cd /home/ubuntu/todo-app
+pnpm install
+```
+
+---
+
+## 3. Set the server IP for the frontend
+
+> **Skip this and the frontend will show "Failed to fetch" on every login/register.**
+
+Open `infra/docker/docker-compose.yml` and add the `VITE_API_URL` line to the frontend service:
+
+```yaml
+frontend:
+  environment:
+    VITE_API_URL: http://<your-aws-public-ip>:3001
+```
+
+Replace `<your-aws-public-ip>` with your actual server IP or domain (e.g. `http://54.123.45.67:3001`).
+
+---
+
+## 4. Start all containers
 
 ```bash
 pnpm docker:dev
 ```
 
-To gracefully shut down the Docker environment and clean up database volumes:
+Wait until postgres is healthy before continuing:
+
 ```bash
-pnpm docker:down
+docker ps   # todo-postgres should show (healthy)
 ```
 
-## 5. Helpful Commands
+---
 
-Here are some other useful commands you can run from the root of the project:
+## 5. Run the database migration
 
-- **`pnpm test`**: Run all unit and integration tests across the monorepo.
-- **`pnpm typecheck`**: Run TypeScript type checking to catch errors early.
-- **`pnpm build`**: Build all workspace packages for production.
-- **`pnpm db:studio`**: Open Drizzle Studio in your browser to inspect and interact with your database tables graphically.
+This creates all tables. Must be done once on a fresh database.
+
+```bash
+docker exec -i todo-postgres psql -U todo_user -d todo_db \
+  < packages/backend/src/db/migrations/0000_dapper_chimera.sql
+```
+
+Verify tables were created:
+
+```bash
+docker exec todo-postgres psql -U todo_user -d todo_db -c "\dt"
+# Should list: audit_logs, sessions, todos, users
+```
+
+---
+
+## 6. Access the app
+
+| Service  | URL |
+|----------|-----|
+| Frontend | `http://<your-aws-ip>:5173` |
+| Backend API | `http://<your-aws-ip>:3001` |
+| Grafana  | `http://<your-aws-ip>:3000` |
+
+Default admin login (auto-created by the backend on first start):
+
+| Email | Password |
+|-------|----------|
+| `admin@admin.local` | `admin` |
+
+---
+
+## Useful commands
+
+```bash
+# Stop everything (keeps data)
+docker compose -f infra/docker/docker-compose.yml down
+
+# Stop and wipe all data (full reset)
+pnpm docker:down
+
+# View backend logs
+docker logs todo-backend -f
+
+# Open database shell
+docker exec -it todo-postgres psql -U todo_user -d todo_db
+
+# Run migration via drizzle-kit (alternative to step 5)
+export DATABASE_URL="postgresql://todo_user:todo_password@localhost:5432/todo_db"
+pnpm db:migrate
+```
+
+---
+
+## Local development (macOS / Linux desktop)
+
+If running on your own machine instead of a server, skip steps 1 and 3.
+
+Start only the database container, then run backend and frontend separately with hot-reload:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml up -d postgres
+
+# Terminal 1 — backend (http://localhost:3001)
+pnpm dev
+
+# Terminal 2 — frontend (http://localhost:5173)
+pnpm --filter @todo/frontend dev
+```
+
+Run migration after starting postgres:
+
+```bash
+export DATABASE_URL="postgresql://todo_user:todo_password@localhost:5432/todo_db"
+pnpm db:migrate
+```
