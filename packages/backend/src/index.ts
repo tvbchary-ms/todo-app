@@ -1,13 +1,30 @@
 import "./env-setup.js";
 import { createApp } from "./app.js";
 import { getConfig } from "./config/index.js";
-import { closeDb } from "./db/index.js";
+import { getDb, closeDb } from "./db/index.js";
 import { seedAdminUser } from "./db/seed.js";
 import { logger } from "./lib/logger.js";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 
 const appConfig = getConfig();
 const app = createApp();
+
+// ─── Run Migrations ─────────────────────────────────────────
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const migrationsFolder = join(__dirname, "db", "migrations");
+
+try {
+  logger.info("Running database migrations…");
+  await migrate(getDb(), { migrationsFolder });
+  logger.info("✅ Migrations complete");
+} catch (err) {
+  logger.fatal({ err }, "❌ Database migration failed — shutting down");
+  process.exit(1);
+}
 
 seedAdminUser().catch((err) => {
   logger.error({ err }, "Failed to seed admin user");

@@ -43,6 +43,7 @@ COPY --from=builder /app/packages/shared/dist packages/shared/dist/
 
 COPY packages/backend/package.json packages/backend/
 COPY --from=builder /app/packages/backend/dist packages/backend/dist/
+COPY packages/backend/src/db/migrations packages/backend/dist/db/migrations/
 
 # Install production-only dependencies
 RUN pnpm install --frozen-lockfile --prod
